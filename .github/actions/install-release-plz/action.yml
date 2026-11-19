@@ -4,21 +4,21 @@ description: Install the rusticdotdev fork of release-plz, which adds the sync-c
 runs:
   using: composite
   steps:
-    - name: Set the release-plz revision
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@5885714d0a40a14b2535c6ffc051fd8e49aa9665 # v1.27.0
+      env:
+        BINSTALL_VERSION: 1.27.0
+    - name: Install release-plz
       shell: bash
-      # Commit of https://github.com/rusticdotdev/release-plz to install.
-      run: echo "RELEASE_PLZ_REV=f6116e8d71a3f7df2f26c579daa9cfcd480c3449" >> "$GITHUB_ENV"
-    - name: Restore release-plz from cache
-      id: cache
-      uses: actions/cache@v5
-      with:
-        path: ~/.cargo/bin/release-plz
-        key: release-plz-${{ runner.os }}-${{ runner.arch }}-${{ env.RELEASE_PLZ_REV }}
-    - name: Build release-plz
-      if: steps.cache.outputs.cache-hit != 'true'
-      shell: bash
+      # Download the pre-built binary from the releases of the fork.
+      # `--git` makes cargo-binstall read the fork's manifest instead of the crates.io one.
+      # Without the `compile` strategy, a missing binary fails instead of building from source.
       run: |
-        cargo install release-plz \
+        cargo-binstall "release-plz@${RELEASE_PLZ_VERSION}" \
           --git https://github.com/rusticdotdev/release-plz \
-          --rev "${RELEASE_PLZ_REV}" \
-          --locked
+          --strategies=crate-meta-data \
+          --force \
+          --no-confirm
+      env:
+        RELEASE_PLZ_VERSION: 0.4.4-rusticdotdev.1
+        GITHUB_TOKEN: ${{ github.token }}
