@@ -20,7 +20,6 @@
 - map more MySQL error codes to Diesel error kinds
 - drop the misleading authentication-plugin wording from Error::Unsupported
 - hold the tokio pool permit until the connection reset finishes
-- new syntax for release-plz
 
 ### <!-- 3 -->Documentation
 - fix links in README.md
