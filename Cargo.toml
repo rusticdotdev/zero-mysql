@@ -23,7 +23,7 @@ sync-tls = ["dep:rustls", "dep:rustls-platform-verifier"]
 tokio-tls = ["dep:rustls", "dep:rustls-platform-verifier", "dep:tokio-rustls"]
 derive = ["dep:zero-mysql-derive"]
 with-uuid = ["dep:uuid"]
-with-chrono = ["dep:chrono"]
+with-jiff = ["dep:jiff"]
 with-time = ["dep:time"]
 with-rust-decimal = ["dep:rust_decimal"]
 compio = ["dep:compio", "dep:tokio"]
@@ -62,7 +62,7 @@ simdutf8 = "0.1"
 smart-default = "0.7"
 zero-mysql-derive = { version = "0.2", path = "zero-mysql-derive", optional = true }
 uuid = { version = "1", optional = true }
-chrono = { version = "0.4", default-features = false, optional = true }
+jiff = { version = "0.2", default-features = false, optional = true }
 time = { version = "0.3", optional = true }
 rust_decimal = { version = "1", optional = true }
 

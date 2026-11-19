@@ -50,6 +50,8 @@ pub use zero_mysql_derive as r#macro;
 mod buffer_test;
 #[cfg(test)]
 mod constant_test;
+#[cfg(all(test, feature = "with-jiff"))]
+mod jiff_test;
 #[cfg(test)]
 mod opts_test;
 #[cfg(test)]

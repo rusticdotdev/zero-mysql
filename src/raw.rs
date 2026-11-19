@@ -825,62 +825,72 @@ impl FromRawValue<'_> for uuid::Uuid {
 }
 
 // ============================================================================
-// chrono support
+// jiff support
 // ============================================================================
 
-#[cfg(feature = "with-chrono")]
-const MIDNIGHT: chrono::NaiveTime = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap();
+#[cfg(feature = "with-jiff")]
+fn jiff_date(year: u16, month: u8, day: u8) -> Result<jiff::civil::Date> {
+    let invalid = || Error::BadUsageError(format!("Invalid date: {}-{}-{}", year, month, day));
+    let (Ok(jiff_year), Ok(jiff_month), Ok(jiff_day)) =
+        (i16::try_from(year), i8::try_from(month), i8::try_from(day))
+    else {
+        return Err(invalid());
+    };
+    jiff::civil::Date::new(jiff_year, jiff_month, jiff_day).map_err(|_err| invalid())
+}
 
-#[cfg(feature = "with-chrono")]
-impl FromRawValue<'_> for chrono::NaiveDate {
+#[cfg(feature = "with-jiff")]
+fn jiff_time(hour: u8, minute: u8, second: u8, microsecond: u32) -> Option<jiff::civil::Time> {
+    let subsec_nanosecond = i32::try_from(microsecond).ok()?.checked_mul(1000)?;
+    jiff::civil::Time::new(
+        i8::try_from(hour).ok()?,
+        i8::try_from(minute).ok()?,
+        i8::try_from(second).ok()?,
+        subsec_nanosecond,
+    )
+    .ok()
+}
+
+#[cfg(feature = "with-jiff")]
+impl FromRawValue<'_> for jiff::civil::Date {
     fn from_date0() -> Result<Self> {
         Err(Error::BadUsageError(
-            "Cannot decode zero DATE to chrono::NaiveDate".to_string(),
+            "Cannot decode zero DATE to jiff::civil::Date".to_string(),
         ))
     }
 
     fn from_date4(v: &Timestamp4) -> Result<Self> {
-        chrono::NaiveDate::from_ymd_opt(v.year() as i32, v.month as u32, v.day as u32).ok_or_else(
-            || Error::BadUsageError(format!("Invalid date: {}-{}-{}", v.year(), v.month, v.day)),
-        )
+        jiff_date(v.year(), v.month, v.day)
     }
 }
 
-#[cfg(feature = "with-chrono")]
-impl FromRawValue<'_> for chrono::NaiveTime {
+#[cfg(feature = "with-jiff")]
+impl FromRawValue<'_> for jiff::civil::Time {
     fn from_time0() -> Result<Self> {
-        Ok(MIDNIGHT)
+        Ok(jiff::civil::Time::midnight())
     }
 
     fn from_time8(v: &Time8) -> Result<Self> {
         if v.is_negative() || v.days() > 0 {
             return Err(Error::BadUsageError(
-                "Cannot decode TIME with days or negative to chrono::NaiveTime".to_string(),
+                "Cannot decode TIME with days or negative to jiff::civil::Time".to_string(),
             ));
         }
-        chrono::NaiveTime::from_hms_opt(v.hour as u32, v.minute as u32, v.second as u32).ok_or_else(
-            || {
-                Error::BadUsageError(format!(
-                    "Invalid time: {}:{}:{}",
-                    v.hour, v.minute, v.second
-                ))
-            },
-        )
+        jiff_time(v.hour, v.minute, v.second, 0).ok_or_else(|| {
+            Error::BadUsageError(format!(
+                "Invalid time: {}:{}:{}",
+                v.hour, v.minute, v.second
+            ))
+        })
     }
 
     fn from_time12(v: &Time12) -> Result<Self> {
         if v.is_negative() || v.days() > 0 {
             return Err(Error::BadUsageError(
-                "Cannot decode TIME with days or negative to chrono::NaiveTime".to_string(),
+                "Cannot decode TIME with days or negative to jiff::civil::Time".to_string(),
             ));
         }
-        chrono::NaiveTime::from_hms_micro_opt(
-            v.hour as u32,
-            v.minute as u32,
-            v.second as u32,
-            v.microsecond(),
-        )
-        .ok_or_else(|| {
+        jiff_time(v.hour, v.minute, v.second, v.microsecond()).ok_or_else(|| {
             Error::BadUsageError(format!(
                 "Invalid time: {}:{}:{}.{}",
                 v.hour,
@@ -892,48 +902,33 @@ impl FromRawValue<'_> for chrono::NaiveTime {
     }
 }
 
-#[cfg(feature = "with-chrono")]
-impl FromRawValue<'_> for chrono::NaiveDateTime {
+#[cfg(feature = "with-jiff")]
+impl FromRawValue<'_> for jiff::civil::DateTime {
     fn from_datetime0() -> Result<Self> {
         Err(Error::BadUsageError(
-            "Cannot decode zero DATETIME to chrono::NaiveDateTime".to_string(),
+            "Cannot decode zero DATETIME to jiff::civil::DateTime".to_string(),
         ))
     }
 
     fn from_datetime4(v: &Timestamp4) -> Result<Self> {
-        let date = chrono::NaiveDate::from_ymd_opt(v.year() as i32, v.month as u32, v.day as u32)
-            .ok_or_else(|| {
-            Error::BadUsageError(format!("Invalid date: {}-{}-{}", v.year(), v.month, v.day))
-        })?;
-        Ok(date.and_time(MIDNIGHT))
+        let date = jiff_date(v.year(), v.month, v.day)?;
+        Ok(date.to_datetime(jiff::civil::Time::midnight()))
     }
 
     fn from_datetime7(v: &Timestamp7) -> Result<Self> {
-        let date = chrono::NaiveDate::from_ymd_opt(v.year() as i32, v.month as u32, v.day as u32)
-            .ok_or_else(|| {
-            Error::BadUsageError(format!("Invalid date: {}-{}-{}", v.year(), v.month, v.day))
+        let date = jiff_date(v.year(), v.month, v.day)?;
+        let time = jiff_time(v.hour, v.minute, v.second, 0).ok_or_else(|| {
+            Error::BadUsageError(format!(
+                "Invalid time: {}:{}:{}",
+                v.hour, v.minute, v.second
+            ))
         })?;
-        date.and_hms_opt(v.hour as u32, v.minute as u32, v.second as u32)
-            .ok_or_else(|| {
-                Error::BadUsageError(format!(
-                    "Invalid time: {}:{}:{}",
-                    v.hour, v.minute, v.second
-                ))
-            })
+        Ok(date.to_datetime(time))
     }
 
     fn from_datetime11(v: &Timestamp11) -> Result<Self> {
-        let date = chrono::NaiveDate::from_ymd_opt(v.year() as i32, v.month as u32, v.day as u32)
-            .ok_or_else(|| {
-            Error::BadUsageError(format!("Invalid date: {}-{}-{}", v.year(), v.month, v.day))
-        })?;
-        date.and_hms_micro_opt(
-            v.hour as u32,
-            v.minute as u32,
-            v.second as u32,
-            v.microsecond(),
-        )
-        .ok_or_else(|| {
+        let date = jiff_date(v.year(), v.month, v.day)?;
+        let time = jiff_time(v.hour, v.minute, v.second, v.microsecond()).ok_or_else(|| {
             Error::BadUsageError(format!(
                 "Invalid datetime: {}-{}-{} {}:{}:{}.{}",
                 v.year(),
@@ -944,7 +939,8 @@ impl FromRawValue<'_> for chrono::NaiveDateTime {
                 v.second,
                 v.microsecond()
             ))
-        })
+        })?;
+        Ok(date.to_datetime(time))
     }
 }
 

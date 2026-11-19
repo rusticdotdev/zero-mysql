@@ -76,19 +76,19 @@ Additional type support is available through feature flags.
 | `VARCHAR`, `CHAR` | `uuid::Uuid` | Parsed from hyphenated string |
 | `BINARY(16)` | `uuid::Uuid` | Parsed from 16 bytes |
 
-### `with-chrono` (chrono crate)
+### `with-jiff` (jiff crate)
 
 | Rust Type | MySQL Type |
 |-----------|------------|
-| `chrono::NaiveDate` | `DATE` |
-| `chrono::NaiveTime` | `TIME` |
-| `chrono::NaiveDateTime` | `DATETIME` |
+| `jiff::civil::Date` | `DATE` |
+| `jiff::civil::Time` | `TIME` |
+| `jiff::civil::DateTime` | `DATETIME` |
 
 | MySQL Type | Rust Type | Notes |
 |------------|-----------|-------|
-| `DATE` | `chrono::NaiveDate` | Zero dates (`0000-00-00`) return an error |
-| `TIME` | `chrono::NaiveTime` | Negative times or times with days return an error |
-| `DATETIME`, `TIMESTAMP` | `chrono::NaiveDateTime` | Zero datetimes return an error |
+| `DATE` | `jiff::civil::Date` | Zero dates (`0000-00-00`) return an error |
+| `TIME` | `jiff::civil::Time` | Negative times or times with days return an error |
+| `DATETIME`, `TIMESTAMP` | `jiff::civil::DateTime` | Zero datetimes return an error |
 
 ### `with-time` (time crate)
 

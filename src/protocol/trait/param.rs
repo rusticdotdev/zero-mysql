@@ -567,14 +567,11 @@ impl TypedParam for &uuid::Uuid {
 }
 
 // ============================================================================
-// chrono support
+// jiff support
 // ============================================================================
 
-#[cfg(feature = "with-chrono")]
-use chrono::{Datelike, Timelike};
-
-#[cfg(feature = "with-chrono")]
-impl TypedParam for chrono::NaiveDate {
+#[cfg(feature = "with-jiff")]
+impl TypedParam for jiff::civil::Date {
     fn encode_type(out: &mut Vec<u8>) {
         out.push(ColumnType::MYSQL_TYPE_DATE as u8);
         out.push(0x00);
@@ -589,15 +586,15 @@ impl TypedParam for chrono::NaiveDate {
     }
 }
 
-#[cfg(feature = "with-chrono")]
-impl TypedParam for chrono::NaiveTime {
+#[cfg(feature = "with-jiff")]
+impl TypedParam for jiff::civil::Time {
     fn encode_type(out: &mut Vec<u8>) {
         out.push(ColumnType::MYSQL_TYPE_TIME as u8);
         out.push(0x00);
     }
 
     fn encode_value(&self, out: &mut Vec<u8>) -> Result<()> {
-        let micros = self.nanosecond() / 1000;
+        let micros = self.subsec_nanosecond().cast_unsigned() / 1000;
         if micros > 0 {
             out.push(12); // length
             out.push(0); // is_negative
@@ -618,15 +615,15 @@ impl TypedParam for chrono::NaiveTime {
     }
 }
 
-#[cfg(feature = "with-chrono")]
-impl TypedParam for chrono::NaiveDateTime {
+#[cfg(feature = "with-jiff")]
+impl TypedParam for jiff::civil::DateTime {
     fn encode_type(out: &mut Vec<u8>) {
         out.push(ColumnType::MYSQL_TYPE_DATETIME as u8);
         out.push(0x00);
     }
 
     fn encode_value(&self, out: &mut Vec<u8>) -> Result<()> {
-        let micros = self.and_utc().timestamp_subsec_micros();
+        let micros = self.subsec_nanosecond().cast_unsigned() / 1000;
         if micros > 0 {
             out.push(11); // length
             write_int_2(out, u16::try_from(self.year()).unwrap_or(0));
