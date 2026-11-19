@@ -4,20 +4,23 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [edited]
 
-permissions:
-  id-token: write
-  contents: write
-  pull-requests: write
-
-concurrency:
-  group: release-plz-${{ github.ref }}
-  cancel-in-progress: false
+permissions: {}
 
 jobs:
   release-plz:
     name: Release-plz
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -26,7 +29,63 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
-      - name: Run release-plz
-        uses: release-plz/action@v0.5
+      - name: Install cargo-semver-checks
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks@0.51
+      - name: Install release-plz
+        uses: ./.github/actions/install-release-plz
+      - name: Configure git user from GitHub token
+        uses: release-plz/git-config@59144859caf016f8b817a2ac9b051578729173c4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run release-plz release-pr
+        run: |
+          release-plz release-pr \
+            --git-token "${GITHUB_TOKEN}" \
+            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --forge github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run release-plz release
+        run: release-plz release --git-token "${GITHUB_TOKEN}" --forge github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # When the description of the release PR is edited, copy the text between the
+  # `<!-- release-plz:changelog-start ... -->` and `<!-- release-plz:changelog-end -->`
+  # comments into CHANGELOG.md on the release PR branch.
+  sync-changelog:
+    name: Sync changelog
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.changes.body &&
+      startsWith(github.head_ref, 'release-plz-') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: sync-changelog-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout release PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install release-plz
+        uses: ./.github/actions/install-release-plz
+      - name: Run release-plz sync-changelog
+        run: |
+          release-plz sync-changelog \
+            --pr "${PR_NUMBER}" \
+            --git-token "${GITHUB_TOKEN}" \
+            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --forge github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
