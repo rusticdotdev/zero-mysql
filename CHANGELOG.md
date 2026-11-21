@@ -2,10 +2,12 @@
 
 ## [v0.7.0](https://github.com/rusticdotdev/zero-mysql/compare/v0.6.0...v0.7.0) - 2026-11-21
 
+### Breaking Changes
+- [**breaking**] replace the `with-chrono` feature with `with-jiff`
+- [**breaking**] replace `Opts::tls` with `Opts::tls_mode`
+- 
 ### <!-- 0 -->New features
-- [**breaking**] replace the with-chrono feature with with-jiff
-- add Opts::tls_config for custom rustls configs
-- [**breaking**] replace Opts::tls with Opts::tls_mode
+- add Opts::tls_config for custom rustls 
 
 ### <!-- 1 -->Bug fixes
 - release the sync pool permit when connecting fails
@@ -20,22 +22,10 @@
 - map more MySQL error codes to Diesel error kinds
 - drop the misleading authentication-plugin wording from Error::Unsupported
 - hold the tokio pool permit until the connection reset finishes
-- new syntax for release-plz
-
-### <!-- 3 -->Documentation
-- fix links in README.md
-- add a compilation of MySQL and MariaDB wire protocol docs
-- remove comments that justify the code instead of describing it
-- link the user guide from the crate doc
-- add crate-level doc comment
-- remove license section from README
-- clean up
 
 ### <!-- 9 -->Other
 - refactor: verify TLS certificates with rustls-platform-verifier
 - refactor: use tokio's semaphore in the compio pool instead of async-lock
-- revert: allow clippy try_from_instead_of_from_str
-- test: read DATABASE_URL instead of a hard-coded URL
 
 ## [v0.6.0](https://github.com/elbaro/zero-mysql/compare/v0.5.1...v0.6.0) - 2026-04-11
 
