@@ -28,27 +28,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-      - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-semver-checks@0.51
-      - name: Install release-plz
-        uses: ./.github/actions/install-release-plz
-      - name: Configure git user from GitHub token
-        uses: release-plz/git-config@59144859caf016f8b817a2ac9b051578729173c4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run release-plz release-pr
-        run: |
-          release-plz release-pr \
-            --git-token "${GITHUB_TOKEN}" \
-            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --forge github
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run release-plz release
-        run: release-plz release --git-token "${GITHUB_TOKEN}" --forge github
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: rusticdotdev/release-plz/.github/actions/release-plz@ead71e9db8ee02b8cb31fedc47663a2578409daf # main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -77,15 +59,10 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Install release-plz
-        uses: ./.github/actions/install-release-plz
       - name: Run release-plz sync-changelog
-        run: |
-          release-plz sync-changelog \
-            --pr "${PR_NUMBER}" \
-            --git-token "${GITHUB_TOKEN}" \
-            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --forge github
+        uses: rusticdotdev/release-plz/.github/actions/release-plz@ead71e9db8ee02b8cb31fedc47663a2578409daf # main
+        with:
+          command: sync-changelog
+          pr: ${{ github.event.pull_request.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
