@@ -3,6 +3,7 @@ use crate::buffer::BufferSet;
 use crate::constant::CommandByte;
 use crate::error::{Error, Result, eyre};
 use crate::protocol::command::ColumnDefinitions;
+use crate::protocol::command::StateMachine;
 use crate::protocol::command::prepared::read_binary_row;
 use crate::protocol::primitive::*;
 use crate::protocol::response::{ErrPayloadBytes, OkPayloadBytes};
@@ -127,8 +128,10 @@ impl<'h, 'stmt, H: BinaryResultSetHandler> BulkExec<'h, 'stmt, H> {
             cache_metadata,
         }
     }
+}
 
-    pub fn step<'buf>(
+impl<H: BinaryResultSetHandler> StateMachine for BulkExec<'_, '_, H> {
+    fn step<'buf>(
         &mut self,
         buffer_set: &'buf mut BufferSet,
     ) -> Result<crate::protocol::command::Action<'buf>> {

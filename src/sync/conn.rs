@@ -7,6 +7,7 @@ use crate::nightly::unlikely;
 use crate::protocol::TextRowPayload;
 use crate::protocol::command::Action;
 use crate::protocol::command::ColumnDefinition;
+use crate::protocol::command::StateMachine;
 use crate::protocol::command::bulk_exec::{BulkExec, BulkFlags, BulkParamsSet, write_bulk_execute};
 use crate::protocol::command::prepared::Exec;
 use crate::protocol::command::prepared::write_execute;
@@ -318,18 +319,11 @@ impl Conn {
         Ok(stmt)
     }
 
-    fn drive_exec<H: BinaryResultSetHandler>(
-        &mut self,
-        stmt: &mut PreparedStatement,
-        handler: &mut H,
-    ) -> Result<()> {
-        let cache_metadata = self
-            .mariadb_capabilities
-            .contains(crate::constant::MariadbCapabilityFlags::MARIADB_CLIENT_CACHE_METADATA);
-        let mut exec = Exec::new(handler, stmt, cache_metadata);
-
+    /// Send the request in the write buffer and drive a state machine to completion.
+    fn drive<S: StateMachine>(&mut self, state_machine: &mut S) -> Result<()> {
+        self.write_payload()?;
         loop {
-            match exec.step(&mut self.buffer_set)? {
+            match state_machine.step(&mut self.buffer_set)? {
                 Action::NeedPacket(buffer) => {
                     buffer.clear();
                     let _ = read_payload(&mut self.stream, buffer)?;
@@ -374,36 +368,11 @@ impl Conn {
         H: BinaryResultSetHandler,
     {
         write_execute(self.buffer_set.new_write_buffer(), stmt.id(), params)?;
-        self.write_payload()?;
-        self.drive_exec(stmt, handler)
-    }
-
-    fn drive_bulk_exec<H: BinaryResultSetHandler>(
-        &mut self,
-        stmt: &mut PreparedStatement,
-        handler: &mut H,
-    ) -> Result<()> {
         let cache_metadata = self
             .mariadb_capabilities
             .contains(crate::constant::MariadbCapabilityFlags::MARIADB_CLIENT_CACHE_METADATA);
-        let mut bulk_exec = BulkExec::new(handler, stmt, cache_metadata);
-
-        loop {
-            match bulk_exec.step(&mut self.buffer_set)? {
-                Action::NeedPacket(buffer) => {
-                    buffer.clear();
-                    let _ = read_payload(&mut self.stream, buffer)?;
-                }
-                Action::ReadColumnMetadata { num_columns } => {
-                    read_column_definition_packets(
-                        &mut self.stream,
-                        &mut self.buffer_set.column_definition_buffer,
-                        num_columns,
-                    )?;
-                }
-                Action::Finished => return Ok(()),
-            }
-        }
+        let mut exec = Exec::new(handler, stmt, cache_metadata);
+        self.drive(&mut exec)
     }
 
     /// Execute a bulk prepared statement with a result set handler.
@@ -447,8 +416,11 @@ impl Conn {
         } else {
             // Use MariaDB bulk execute protocol
             write_bulk_execute(self.buffer_set.new_write_buffer(), stmt.id(), params, flags)?;
-            self.write_payload()?;
-            self.drive_bulk_exec(stmt, handler)
+            let cache_metadata = self
+                .mariadb_capabilities
+                .contains(crate::constant::MariadbCapabilityFlags::MARIADB_CLIENT_CACHE_METADATA);
+            let mut bulk_exec = BulkExec::new(handler, stmt, cache_metadata);
+            self.drive(&mut bulk_exec)
         }
     }
 
@@ -476,9 +448,12 @@ impl Conn {
         P: Params,
     {
         write_execute(self.buffer_set.new_write_buffer(), stmt.id(), params)?;
-        self.write_payload()?;
         let mut handler = FirstHandler::<Row>::default();
-        self.drive_exec(stmt, &mut handler)?;
+        let cache_metadata = self
+            .mariadb_capabilities
+            .contains(crate::constant::MariadbCapabilityFlags::MARIADB_CLIENT_CACHE_METADATA);
+        let mut exec = Exec::new(&mut handler, stmt, cache_metadata);
+        self.drive(&mut exec)?;
         Ok(handler.take())
     }
 
@@ -569,27 +544,6 @@ impl Conn {
         self.exec(stmt, params, &mut handler)
     }
 
-    fn drive_query<H: TextResultSetHandler>(&mut self, handler: &mut H) -> Result<()> {
-        let mut query = Query::new(handler);
-
-        loop {
-            match query.step(&mut self.buffer_set)? {
-                Action::NeedPacket(buffer) => {
-                    buffer.clear();
-                    let _ = read_payload(&mut self.stream, buffer)?;
-                }
-                Action::ReadColumnMetadata { num_columns } => {
-                    read_column_definition_packets(
-                        &mut self.stream,
-                        &mut self.buffer_set.column_definition_buffer,
-                        num_columns,
-                    )?;
-                }
-                Action::Finished => return Ok(()),
-            }
-        }
-    }
-
     /// Execute a text protocol SQL query
     pub fn query<H>(&mut self, sql: &str, handler: &mut H) -> Result<()>
     where
@@ -604,8 +558,8 @@ impl Conn {
         H: TextResultSetHandler,
     {
         write_query(self.buffer_set.new_write_buffer(), sql);
-        self.write_payload()?;
-        self.drive_query(handler)
+        let mut query = Query::new(handler);
+        self.drive(&mut query)
     }
 
     /// Execute a text protocol SQL query and discard the result
@@ -616,8 +570,9 @@ impl Conn {
 
     fn query_drop_inner(&mut self, sql: &str) -> Result<()> {
         write_query(self.buffer_set.new_write_buffer(), sql);
-        self.write_payload()?;
-        self.drive_query(&mut DropHandler::default())
+        let mut handler = DropHandler::default();
+        let mut query = Query::new(&mut handler);
+        self.drive(&mut query)
     }
 
     /// Send a ping to the server to check if the connection is alive
