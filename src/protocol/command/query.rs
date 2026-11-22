@@ -3,6 +3,7 @@ use crate::constant::CommandByte;
 use crate::error::{Error, Result, eyre};
 use crate::protocol::TextRowPayload;
 use crate::protocol::command::ColumnDefinitions;
+use crate::protocol::command::StateMachine;
 use crate::protocol::primitive::*;
 use crate::protocol::response::{ErrPayloadBytes, OkPayloadBytes};
 
@@ -86,7 +87,9 @@ impl<'h, H: TextResultSetHandler> Query<'h, H> {
             column_defs: None,
         }
     }
+}
 
+impl<H: TextResultSetHandler> StateMachine for Query<'_, H> {
     /// Drive the state machine forward
     ///
     /// # Arguments
@@ -95,7 +98,7 @@ impl<'h, H: TextResultSetHandler> Query<'h, H> {
     /// # Returns
     /// * `Action::NeedPacket(&mut Vec<u8>)` - Needs more data in the specified buffer
     /// * `Action::Finished` - Processing complete
-    pub fn step<'buf>(
+    fn step<'buf>(
         &mut self,
         buffer_set: &'buf mut BufferSet,
     ) -> Result<crate::protocol::command::Action<'buf>> {

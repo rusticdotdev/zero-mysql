@@ -2,6 +2,7 @@ use crate::buffer::BufferSet;
 use crate::constant::CommandByte;
 use crate::error::{Error, Result, eyre};
 use crate::protocol::BinaryRowPayload;
+use crate::protocol::command::StateMachine;
 use crate::protocol::primitive::*;
 use crate::protocol::response::{ErrPayloadBytes, OkPayloadBytes};
 use crate::protocol::r#trait::param::Params;
@@ -195,7 +196,9 @@ impl<'h, 'stmt, H: BinaryResultSetHandler> Exec<'h, 'stmt, H> {
             cache_metadata,
         }
     }
+}
 
+impl<H: BinaryResultSetHandler> StateMachine for Exec<'_, '_, H> {
     /// Drive the state machine forward
     ///
     /// # Arguments
@@ -204,7 +207,7 @@ impl<'h, 'stmt, H: BinaryResultSetHandler> Exec<'h, 'stmt, H> {
     /// # Returns
     /// * `Action::NeedPacket(&mut Vec<u8>)` - Needs more data in the specified buffer
     /// * `Action::Finished` - Processing complete
-    pub fn step<'buf>(
+    fn step<'buf>(
         &mut self,
         buffer_set: &'buf mut BufferSet,
     ) -> Result<crate::protocol::command::Action<'buf>> {
