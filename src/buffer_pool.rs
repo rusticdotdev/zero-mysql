@@ -89,6 +89,8 @@ impl Drop for PooledBufferSet {
 pub struct BufferPool {
     buffer_sets: ArrayQueue<BufferSet>,
     column_definition_buffers: ArrayQueue<Vec<u8>>,
+    /// When a buffer is returned to the pool, calls `Vec::shrink_to(soft_buffer_cap)`
+    pub soft_buffer_cap: Option<usize>,
 }
 
 impl BufferPool {
@@ -96,6 +98,7 @@ impl BufferPool {
         Self {
             buffer_sets: ArrayQueue::new(capacity),
             column_definition_buffers: ArrayQueue::new(capacity),
+            soft_buffer_cap: None,
         }
     }
 
@@ -105,11 +108,23 @@ impl BufferPool {
     }
 
     pub fn return_buffer_set(&self, mut buffer_set: BufferSet) {
-        // Clear buffers but preserve capacity
+        // Clear buffers but preserve capacity up to the soft cap
         buffer_set.initial_handshake.clear();
         buffer_set.read_buffer.clear();
         buffer_set.column_definition_buffer.clear();
         // write_buffer is handled by new_write_buffer()
+
+        if let Some(soft_buffer_cap) = self.soft_buffer_cap {
+            buffer_set.initial_handshake.shrink_to(soft_buffer_cap);
+            buffer_set.read_buffer.shrink_to(soft_buffer_cap);
+            buffer_set
+                .column_definition_buffer
+                .shrink_to(soft_buffer_cap);
+            // shrink_to keeps the length, so drop the old payload first.
+            // The 4-byte header space stays.
+            buffer_set.write_buffer.truncate(4);
+            buffer_set.write_buffer.shrink_to(soft_buffer_cap);
+        }
 
         // Ignore if pool is full
         let _ = self.buffer_sets.push(buffer_set);

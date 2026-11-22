@@ -70,3 +70,28 @@ fn buffer_reuse() {
     // Capacity should be preserved
     assert!(buffers.read_buffer.capacity() >= 9);
 }
+
+#[test]
+fn return_buffer_set_shrinks_to_soft_buffer_cap() {
+    use std::sync::Arc;
+
+    use crate::BufferPool;
+
+    const SOFT_BUFFER_CAP: usize = 1024;
+    const GROWN: usize = 1024 * 1024;
+
+    let mut pool = BufferPool::new(1);
+    pool.soft_buffer_cap = Some(SOFT_BUFFER_CAP);
+    let pool = Arc::new(pool);
+
+    let mut buffer_set = pool.get_buffer_set();
+    buffer_set.read_buffer.resize(GROWN, 0);
+    buffer_set.new_write_buffer().resize(GROWN, 0);
+    drop(buffer_set);
+
+    let recycled = pool.get_buffer_set();
+    assert!(recycled.read_buffer.is_empty());
+    assert!(recycled.read_buffer.capacity() < GROWN);
+    assert_eq!(recycled.write_buffer().len(), 4);
+    assert!(recycled.write_buffer.capacity() < GROWN);
+}
