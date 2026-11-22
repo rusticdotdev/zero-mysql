@@ -3225,7 +3225,7 @@ dependencies = [
 
 [[package]]
 name = "zero-mysql"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "auto_impl",
  "aws-lc-rs",

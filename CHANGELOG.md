@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.8.0](https://github.com/rusticdotdev/zero-mysql/compare/v0.7.0...v0.8.0) - 2026-11-22
+
+### <!-- 0 -->New features
+- add BufferPool::soft_buffer_cap
+
+### <!-- 1 -->Bug fixes
+- mark the connection broken when an operation stops mid-response
+
+### <!-- 9 -->Other
+- [**breaking**] refactor!: drive every state machine through one Conn::drive
+
 ## [v0.7.0](https://github.com/rusticdotdev/zero-mysql/compare/v0.6.0...v0.7.0) - 2026-11-21
 
 ### Breaking Changes
