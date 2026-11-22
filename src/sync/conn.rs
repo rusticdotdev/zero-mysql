@@ -276,16 +276,23 @@ impl Conn {
 
         write_prepare(self.buffer_set.new_write_buffer(), sql);
 
-        self.write_payload()?;
-        let _ = read_payload(&mut self.stream, &mut self.buffer_set.read_buffer)?;
+        let mut guard = std::mem::DropGuard::new(&mut *self, |conn| conn.is_broken = true);
+        let conn: &mut Self = &mut guard;
+        conn.write_payload()?;
+        let _ = read_payload(&mut conn.stream, &mut conn.buffer_set.read_buffer)?;
 
         if unlikely(
-            !self.buffer_set.read_buffer.is_empty() && self.buffer_set.read_buffer[0] == 0xFF,
+            !conn.buffer_set.read_buffer.is_empty() && conn.buffer_set.read_buffer[0] == 0xFF,
         ) {
-            Err(ErrPayloadBytes(&self.buffer_set.read_buffer))?
+            let error = Error::from(ErrPayloadBytes(&conn.buffer_set.read_buffer));
+            // A server ERR packet ends the response, so the connection stays usable.
+            if matches!(error, Error::ServerError(_)) {
+                std::mem::DropGuard::dismiss(guard);
+            }
+            return Err(error);
         }
 
-        let prepare_ok = read_prepare_ok(&self.buffer_set.read_buffer)?;
+        let prepare_ok = read_prepare_ok(&conn.buffer_set.read_buffer)?;
         let statement_id = prepare_ok.statement_id();
         let num_params = prepare_ok.num_params();
         let num_columns = prepare_ok.num_columns();
@@ -293,25 +300,26 @@ impl Conn {
         // Skip param definitions (we don't cache them)
         if num_params > 0 {
             for _ in 0..num_params {
-                let _ = read_payload(&mut self.stream, &mut self.buffer_set.read_buffer)?;
+                let _ = read_payload(&mut conn.stream, &mut conn.buffer_set.read_buffer)?;
             }
         }
 
         // Read and cache column definitions for MARIADB_CLIENT_CACHE_METADATA support
         let column_definitions = if num_columns > 0 {
             read_column_definition_packets(
-                &mut self.stream,
-                &mut self.buffer_set.column_definition_buffer,
+                &mut conn.stream,
+                &mut conn.buffer_set.column_definition_buffer,
                 num_columns as usize,
             )?;
             Some(ColumnDefinitions::new(
                 num_columns as usize,
-                std::mem::take(&mut self.buffer_set.column_definition_buffer),
+                std::mem::take(&mut conn.buffer_set.column_definition_buffer),
             )?)
         } else {
             None
         };
 
+        std::mem::DropGuard::dismiss(guard);
         let mut stmt = PreparedStatement::new(statement_id);
         if let Some(col_defs) = column_definitions {
             stmt.set_column_definitions(col_defs);
@@ -321,21 +329,36 @@ impl Conn {
 
     /// Send the request in the write buffer and drive a state machine to completion.
     fn drive<S: StateMachine>(&mut self, state_machine: &mut S) -> Result<()> {
-        self.write_payload()?;
+        let mut guard = std::mem::DropGuard::new(&mut *self, |conn| conn.is_broken = true);
+        let conn: &mut Self = &mut guard;
+        conn.write_payload()?;
         loop {
-            match state_machine.step(&mut self.buffer_set)? {
+            let action = match state_machine.step(&mut conn.buffer_set) {
+                Ok(action) => action,
+                Err(error) => {
+                    // A server ERR packet ends the response, so the connection stays usable.
+                    if matches!(error, Error::ServerError(_)) {
+                        std::mem::DropGuard::dismiss(guard);
+                    }
+                    return Err(error);
+                }
+            };
+            match action {
                 Action::NeedPacket(buffer) => {
                     buffer.clear();
-                    let _ = read_payload(&mut self.stream, buffer)?;
+                    let _ = read_payload(&mut conn.stream, buffer)?;
                 }
                 Action::ReadColumnMetadata { num_columns } => {
                     read_column_definition_packets(
-                        &mut self.stream,
-                        &mut self.buffer_set.column_definition_buffer,
+                        &mut conn.stream,
+                        &mut conn.buffer_set.column_definition_buffer,
                         num_columns,
                     )?;
                 }
-                Action::Finished => return Ok(()),
+                Action::Finished => {
+                    std::mem::DropGuard::dismiss(guard);
+                    return Ok(());
+                }
             }
         }
     }
@@ -585,9 +608,12 @@ impl Conn {
 
     fn ping_inner(&mut self) -> Result<()> {
         write_ping(self.buffer_set.new_write_buffer());
-        self.write_payload()?;
-        self.buffer_set.read_buffer.clear();
-        let _ = read_payload(&mut self.stream, &mut self.buffer_set.read_buffer)?;
+        let mut guard = std::mem::DropGuard::new(&mut *self, |conn| conn.is_broken = true);
+        let conn: &mut Self = &mut guard;
+        conn.write_payload()?;
+        conn.buffer_set.read_buffer.clear();
+        let _ = read_payload(&mut conn.stream, &mut conn.buffer_set.read_buffer)?;
+        std::mem::DropGuard::dismiss(guard);
         Ok(())
     }
 
@@ -599,10 +625,13 @@ impl Conn {
 
     fn reset_inner(&mut self) -> Result<()> {
         write_reset_connection(self.buffer_set.new_write_buffer());
-        self.write_payload()?;
-        self.buffer_set.read_buffer.clear();
-        let _ = read_payload(&mut self.stream, &mut self.buffer_set.read_buffer)?;
-        self.in_transaction = false;
+        let mut guard = std::mem::DropGuard::new(&mut *self, |conn| conn.is_broken = true);
+        let conn: &mut Self = &mut guard;
+        conn.write_payload()?;
+        conn.buffer_set.read_buffer.clear();
+        let _ = read_payload(&mut conn.stream, &mut conn.buffer_set.read_buffer)?;
+        conn.in_transaction = false;
+        std::mem::DropGuard::dismiss(guard);
         Ok(())
     }
 
