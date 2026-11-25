@@ -1,6 +1,6 @@
 [package]
 name = "zero-mysql"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 license = "BlueOak-1.0.0"
 description = "A high-performance MySQL client"
