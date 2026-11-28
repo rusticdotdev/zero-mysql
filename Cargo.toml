@@ -62,7 +62,7 @@ simdutf8 = "0.1"
 smart-default = "0.7"
 zero-mysql-derive = { version = "0.3", path = "zero-mysql-derive", optional = true }
 uuid = { version = "1", optional = true }
-jiff = { version = "0.2", default-features = false, optional = true }
+jiff = { version = "1.0", default-features = false, optional = true }
 time = { version = "0.3", optional = true }
 rust_decimal = { version = "1", optional = true }
 
